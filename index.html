@@ -1,0 +1,177 @@
+<!-- Miigon 2020-12-14 ShenZhen University -->
+<head>
+    <meta charset="utf-8"/>
+    <script src="assembler.js"></script>
+    <script src="vm.js"></script>
+    <style>
+        html {
+            color: white;
+            background-color: #222;
+        }
+        .code {
+            font-size: 13px;
+            color: white;
+            background-color: #222;
+            width: 500px;
+            height: 500px;
+            font-family: monospace;
+        }
+        .execute-button {
+            display: block;
+            font-size: 30px;
+            width: 400px;
+            height: 80px;
+        }
+    </style>
+    <script>
+        function clickCompile(){
+            document.getElementById("machine-code").innerText = "machine code: \n\n" + compileAssembly(document.getElementById("asm-code").value);
+        }
+        function clickExecute(){
+            let state = newVmState();
+            let code = compileAssembly(document.getElementById("asm-code").value);
+            loadProgram(state, code, 0);
+            document.getElementById("output").innerText = startExecution(state);
+            console.log(state);
+        }
+        function clickExample1(){
+            let code = `// 例子1: 使用位运算实现两数相加
+LOADV   0,0     // 0号寄存器，保持值为0
+LOADV   1,0     // 进位寄存器
+LOADV   2,13    // 加数A，0x13 = 19
+LOADV   3,21    // 加数B，0x21 = 33
+LOADV   6,FE    // 6号寄存器，常数
+
+AND     1 2,3   // 对A与B进行位与，存到1号寄存器(进位寄存器)
+XOR     4 2,3   // A对B进行异或，存到4号寄存器(结果寄存器)
+
+// ===主要算法从这里开始=== //
+JE      1,1C    // 如果进位寄存器值为0，说明已经计算完毕，跳转到输出
+// 下面的代码，其实只是实现了将1号进位寄存器左移一位，并存储于5号寄存器中
+// 但是由于书中描述的机器码并没有向左位移指令，只能这样实现左位移
+// 注意：该缺陷并不影响它的图灵完备性
+MOVE    1,5
+ROTATE  5,7
+AND     5 5,6
+
+AND     1 4,5
+XOR     4 4,5
+
+JE      0,0E
+
+// ===输出=== //
+DEBUG   2       // 输出A
+
+LOADV   7,2B    // 寄存器7：辅助输出用，0x2B为'+'的ASCII码
+DEBUGA  7       // 输出'+'
+
+DEBUG   3       // 输出B
+
+LOADV   7,3D    // 0x3D为'='的ASCII码
+DEBUGA  7       // 输出'='
+
+DEBUG   4       // 输出A + B
+
+HALT            // 结束程序
+
+`
+            document.getElementById("asm-code").value = code;
+            clickCompile();
+        }
+        function clickExample2(){
+            let code = `// 例子2: Hello,world!
+LOADV 0,48
+DEBUGA 0         // 输出'H'
+LOADV 0,65
+DEBUGA 0         // 输出'e'
+LOADV 0,6C
+DEBUGA 0         // 输出'l'
+LOADV 0,6C
+DEBUGA 0         // 输出'l'
+LOADV 0,6F
+DEBUGA 0         // 输出'o'
+LOADV 0,2C
+DEBUGA 0         // 输出','
+LOADV 0,77
+DEBUGA 0         // 输出'w'
+LOADV 0,6F
+DEBUGA 0         // 输出'o'
+LOADV 0,72
+DEBUGA 0         // 输出'r'
+LOADV 0,6C
+DEBUGA 0         // 输出'l'
+LOADV 0,64
+DEBUGA 0         // 输出'd'
+LOADV 0,21
+DEBUGA 0         // 输出'!'
+HALT             // 结束程序
+
+`
+            document.getElementById("asm-code").value = code;
+            clickCompile();
+        }
+        function clickExample3(){
+            let code = `// 例子3: 输出1到127内所有偶数
+LOADV 1,1       // Accumulator，累积器
+LOADV 7,0A      // 换行符
+
+// 判断是否到达127
+LOADV 0,7F
+JE 1 16         // 若达到，则退出程序
+LOADV 0,1
+
+AND 2 1,0       // reg(2) = reg(1) & reg(0)
+ADD 1 1,0       // reg(1) = reg(1) + reg(0)
+JE 2 14         // 偶数，跳过循环
+DEBUG 1         // 输出当前数字
+DEBUGA 7        // 换行
+JE 0,04         // 返回顶部继续循环
+
+HALT            // 结束程序
+
+`
+            document.getElementById("asm-code").value = code;
+            clickCompile();
+        }
+    </script>
+</head>
+<body>
+    <code><pre>
+// simple 8-bit assembly language compiler and intepreter
+// Author: Miigon 2020-12-14 ShenZhen University
+
+Native Operations:
+----------------+-----------------------------------------------------------------------------
+USAGE           |   DESCRIPTION
+----------------+-----------------------------------------------------------------------------
+LOAD    R XY    |   load mem(XY) to reg(R)
+LOADV   R XY    |   load XY to reg(R)
+STORE   R XY    |   store reg(R) to mem(XY)
+MOVE    R S     |   move reg(R) to reg(S)
+ADD     R S T   |   add reg(S) and reg(T) as integer, store the result to reg(R)
+ADDF    R S T   |   add reg(S) and reg(T) as float, store the result to reg(R)
+OR      R S T   |   perform bitwise `reg(S) OR reg(T)`, store the result to reg(R)
+AND     R S T   |   perform bitwise `reg(S) AND reg(T)`, store the result to reg(R)
+XOR     R S T   |   perform bitwise `reg(S) XOR reg(T)`, store the result to reg(R)
+ROTATE  R X     |   right-rotate reg(R) for X bits
+JE      R XY    |   jump to mem(XY) if reg(R) equals reg(0)
+HALT            |   stop execution
+
+DEBUGA  R       |   output reg(R) as ascii
+DEBUG   R       |   output reg(R) as number
+    </pre>
+    </code>
+    <p>
+        Examples:
+        <button class="example-button" onclick="clickExample1()">1.位运算实现两数相加</button>
+        <button class="example-button" onclick="clickExample2()">2.Hello,world!</button>
+        <button class="example-button" onclick="clickExample3()">3.输出1到127内所有奇数</button>
+    </p>
+    <textarea class="code" id="asm-code" autocorrect="off" oninput="clickCompile()"></textarea>
+    <textarea class="code" id="machine-code" readonly autocorrect="off"></textarea>
+    <p>
+        <button class="execute-button" onclick="clickExecute()">EXECUTE</button>
+    </p>
+    <p>Output:</p>
+    <textarea class="code" id="output" readonly autocorrect="off"></textarea>
+</body>
