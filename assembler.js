@@ -35,47 +35,77 @@ const OPERATIONS = {
     'XOR':      { opcode:'9', mode: 'RST' },
     'ROTATE':   { opcode:'A', mode: 'ROX' },
     'JE':       { opcode:'B', mode: 'RXY' },
+    'LJE':      { opcode:'B', mode: 'RLB' },
     'HALT':     { opcode:'C', mode: '000' },
     'DEBUGA':   { opcode:'D00', mode: 'R' },
     'DEBUG':    { opcode:'D10', mode: 'R' },
 }
 
+const _addPaddingZero = n => ('0'+n).substr(-2,2)
+const _toHex = n => _addPaddingZero((n).toString(16).toUpperCase())
+
 function compileAssembly(asm) {
     let ops = asm.split('\n').map(v => v.split('//')[0]).filter(v => v.length>0);
-    let output = "";
-    for(let op of ops) {
+    let labelMap = {};
+    
+    // STAGE 1
+    let stage1output = "";
+    let currentAddress = 0;
+    for(const i of ops.keys()) {
+        let op = ops[i];
         let part = op.replace(/,/g,' ').split(' ').filter(v => v.length>0);
-        let operation = OPERATIONS[part[0]];
-        // if(!operation) throw new Error(`unsupported_operation: ${part[0]}`);
-        if(!operation) continue;
-        let R = part[1] || '';
-        let S = part[2] || ''; 
-        let T = part[3] || '';
-        let XY = part[2] || '';
-        output += operation.opcode;
-        switch(operation.mode) {
-            case 'RXY':
-                output += R + ('0'+XY).substr(-2,2);
-                break;
-            case 'ORS':
-                output += "0" + R + S;
-                break;
-            case 'RST':
-                output += R + S + T;
-                break;
-            case 'ROX':
-                output += R + '0' + S;
-                break;
-            case '000':
-                output += '000';
-                break;
-            case 'R':
-                output += R;
-                break;
-            default: 
-                // throw new Error(`unsupported_operation_mode: ${operation.mode}`);
+
+        if(part && part[0] && part[0][0] == ":") { // Label
+            let labelName = part[0].substr(1);
+            // if(labelMap[labelName]) throw new Error(`label redefinition: ${labelName}`);
+            labelMap[labelName] = currentAddress;
+        } else { // Operation
+            let operation = OPERATIONS[part[0]];
+            // if(!operation) throw new Error(`unsupported_operation: ${part[0]}`);
+            if(!operation) continue;
+            let R = part[1] || '';
+            let S = part[2] || ''; 
+            let T = part[3] || '';
+            let XY = part[2] || '';
+            let LB = XY;
+            stage1output += operation.opcode;
+            switch(operation.mode) {
+                case 'RXY':
+                    stage1output += R + _addPaddingZero(XY);
+                    break;
+                case 'ORS':
+                    stage1output += "0" + R + S;
+                    break;
+                case 'RST':
+                    stage1output += R + S + T;
+                    break;
+                case 'ROX':
+                    stage1output += R + '0' + S;
+                    break;
+                case '000':
+                    stage1output += '000';
+                    break;
+                case 'R':
+                    stage1output += R;
+                    break;
+                case 'RLB': // R and a Label
+                    stage1output += R + `:${LB}:`;
+                default: 
+                    // throw new Error(`unsupported_operation_mode: ${operation.mode}`);
+            }
+            stage1output += ' ';
+            currentAddress += 2;
         }
-        output += ' ';
     }
-    return output;
+    let stage2output = stage1output;
+    for(let m of stage1output.matchAll(/:(.*?):/g)) {
+        let labelName = m[1];
+        let labelAddress = labelMap[labelName];
+        // if(!labelName) throw new Error(`invalid label reference: ${m[0]}`);
+        // if(!labelMap[labelName]) throw new Error(`undefined label: ${m[0]}`);
+        if(!labelMap[labelName]) continue;
+        stage2output = stage2output.replace(/:(.*?):/, _toHex(labelAddress)) // this is not the best way to do it. some optimization can be done here.
+
+    }
+    return stage2output;
 }

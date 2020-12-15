@@ -7,6 +7,7 @@ function newVmState() {
         registers:  new Array(16).fill(0),
         memory:     new Array(256).fill(0),
         p:          0,
+        jit:        null,
     };
 }
 
@@ -60,6 +61,7 @@ function startExecution(state, p = 0) {
         } else if(byte1 == 0xD0) { // output reg(R) as ascii
             output += String.fromCharCode(state.registers[para3]);
         } else if(byte1 == 0xD1) { // output reg(R) as number
+            console.log(_getOriginalFromComplement(state.registers[para3]));
             output += _getOriginalFromComplement(state.registers[para3]);
         }
     }

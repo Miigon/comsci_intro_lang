@@ -34,8 +34,9 @@
             document.getElementById("output").innerText = startExecution(state);
             console.log(state);
         }
-        function clickExample1(){
-            let code = `// 例子1: 使用位运算实现两数相加
+        function clickExample(i){
+            let codes = [
+`// 例子1: 使用位运算实现两数相加
 LOADV   0,0     // 0号寄存器，保持值为0
 LOADV   1,0     // 进位寄存器
 LOADV   2,13    // 加数A，0x13 = 19
@@ -73,13 +74,8 @@ DEBUGA  7       // 输出'='
 DEBUG   4       // 输出A + B
 
 HALT            // 结束程序
-
-`
-            document.getElementById("asm-code").value = code;
-            clickCompile();
-        }
-        function clickExample2(){
-            let code = `// 例子2: Hello,world!
+`,
+`// 例子2: Hello,world!
 LOADV 0,48
 DEBUGA 0         // 输出'H'
 LOADV 0,65
@@ -105,13 +101,8 @@ DEBUGA 0         // 输出'd'
 LOADV 0,21
 DEBUGA 0         // 输出'!'
 HALT             // 结束程序
-
-`
-            document.getElementById("asm-code").value = code;
-            clickCompile();
-        }
-        function clickExample3(){
-            let code = `// 例子3: 输出1到127内所有偶数
+`,
+`// 例子3: 输出1到127内所有偶数
 LOADV 1,1       // Accumulator，累积器
 LOADV 7,0A      // 换行符
 
@@ -128,44 +119,123 @@ DEBUGA 7        // 换行
 JE 0,04         // 返回顶部继续循环
 
 HALT            // 结束程序
+`,
+`// 例子4: 跳转到标签
+LJE 0 LABEL2     // 直接跳转到某个标签，可以测试修改为不同标签时的不同效果
 
+:OUTPUT          // 定义输出标签
+DEBUG 1          // 这个标签的代码会将 寄存器1 输出
+HALT             // 然后退出程序
+
+
+:LABEL1          // 定义标签 LABEL1
+LOADV 1,11       // 0x11 = 17
+LJE 0 OUTPUT     // 转跳到输出
+
+:LABEL2          // 定义标签 LABEL2
+LOADV 1,DD       // 0xDD = -35
+LJE 0 OUTPUT     // 转跳到输出
+
+:LABEL3          // 定义标签 LABEL3
+LOADV 1,CC       // 0xCC = -52
+                 // 注意这里并没有跳出，所以会继续执行进 LABEL4 的代码
+:LABEL4          // 定义标签 LABEL4
+LOADV 1,FF       // 0xFF = -1
+LJE 0 OUTPUT     // 转跳到输出
+
+// LJE 指令：使用方式与 JE 指令相同，但转跳目标由地址变为标签
+
+// 改变第一行的 跳转目标，来改变代码执行路径
+// 注意 LABEL3 中，虽然将 寄存器1 赋值了0xCC，但由于赋值后，
+// 并没有转跳到其他位置，所以代码继续向下执行，进入 LABEL4后面的代码
+// 故 LABEL3 最终结果与 LABEL4 相同，都是输出-1
+`,
+`// 例子5: 计算5的阶乘
+LOADV E,5       // target
+LOADV 1,1       // result register
+LOADV 2,1       // currentNum
+LOADV 3,1       // register3, constant
+LOADV F,2A      // registerF, '*'
+
+:NEXT
+DEBUG 2
+MOVE E,0
+LJE 2 OUTPUT    // if we hit our target, jump to output
+DEBUGA F        // output '*'
+ADD 2 2,3       // increment currentNum by 1
+
+// multiply register 1 and 2, store it to register 1
+MOVE 1,4        // save result register to a temporary register 4
+MOVE 2,0        // set iteration target 'n' to 'currentNum'
+LOADV 5,1       // accumulator 2, used to implement multiplication
+:M_LOOP
+LJE 5 NEXT      // jump to next number if we already did the addition 'n' times
+ADD 1 1,4       // increment result by 'temporary register 4' amount,
+                // doing this 'n' times, is effectively calculating 'result = result * n'
+ADD 5 5,3       // increment accumulator by 1
+LJE 0 M_LOOP    // jump back to M_LOOP
+
+:OUTPUT
+LOADV F,3D      // registerF, '='
+DEBUGA F        // output '='
+DEBUG 1         // output result
+HALT            // stop execution
 `
-            document.getElementById("asm-code").value = code;
+]
+            document.getElementById("asm-code").value = codes[i];
             clickCompile();
         }
+
     </script>
 </head>
 <body>
     <code><pre>
-// simple 8-bit assembly language compiler and intepreter
+// simple assembly language compiler and intepreter
 // Author: Miigon 2020-12-14 ShenZhen University
 
 Native Operations:
+---+-----------------+------------------------------------------------------------------------
+OP | USAGE           |   DESCRIPTION
+---+-----------------+------------------------------------------------------------------------
+ 1 | LOAD    R XY    |   load mem(XY) to reg(R)
+ 2 | LOADV   R XY    |   load XY to reg(R)
+ 3 | STORE   R XY    |   store reg(R) to mem(XY)
+ 4 | MOVE    R S     |   move reg(R) to reg(S)
+ 5 | ADD     R S T   |   add reg(S) and reg(T) as integer, store the result to reg(R)
+ 6 | ADDF    R S T   |   add reg(S) and reg(T) as float, store the result to reg(R)
+ 7 | OR      R S T   |   perform bitwise `reg(S) OR reg(T)`, store the result to reg(R)
+ 8 | AND     R S T   |   perform bitwise `reg(S) AND reg(T)`, store the result to reg(R)
+ 9 | XOR     R S T   |   perform bitwise `reg(S) XOR reg(T)`, store the result to reg(R)
+ A | ROTATE  R X     |   right-rotate reg(R) for X bits
+ B | JE      R XY    |   jump to mem(XY) if reg(R) equals reg(0)
+ C | HALT            |   stop execution
+---+-----------------+------------------------------------------------------------------------
+ D | DEBUGA  R       |   output reg(R) as ascii
+ D | DEBUG   R       |   output reg(R) as number
+---+-----------------+------------------------------------------------------------------------
+
+Extended Operations: (Operations that do not directly correspond to a native operation) 
 ----------------+-----------------------------------------------------------------------------
 USAGE           |   DESCRIPTION
 ----------------+-----------------------------------------------------------------------------
-LOAD    R XY    |   load mem(XY) to reg(R)
-LOADV   R XY    |   load XY to reg(R)
-STORE   R XY    |   store reg(R) to mem(XY)
-MOVE    R S     |   move reg(R) to reg(S)
-ADD     R S T   |   add reg(S) and reg(T) as integer, store the result to reg(R)
-ADDF    R S T   |   add reg(S) and reg(T) as float, store the result to reg(R)
-OR      R S T   |   perform bitwise `reg(S) OR reg(T)`, store the result to reg(R)
-AND     R S T   |   perform bitwise `reg(S) AND reg(T)`, store the result to reg(R)
-XOR     R S T   |   perform bitwise `reg(S) XOR reg(T)`, store the result to reg(R)
-ROTATE  R X     |   right-rotate reg(R) for X bits
-JE      R XY    |   jump to mem(XY) if reg(R) equals reg(0)
-HALT            |   stop execution
+LJE     R LB    |   jump to label(LB) if reg(R) equals reg(0)
+JMP     R LB    |   jump to label(LB) if reg(R) equals reg(0)
 
-DEBUGA  R       |   output reg(R) as ascii
-DEBUG   R       |   output reg(R) as number
+Note: this virtual machine has 16 registers (0x0 to 0xF) and 256 bytes of RAM (0x00 to 0xFF)
+
+      program will be loaded at 0x00 and take up all the space it needs.
+      data and program share the same memory space, so using memory space after 0xB0 for data
+      storage purposes is generally recommended.
+      
     </pre>
     </code>
     <p>
         Examples:
-        <button class="example-button" onclick="clickExample1()">1.位运算实现两数相加</button>
-        <button class="example-button" onclick="clickExample2()">2.Hello,world!</button>
-        <button class="example-button" onclick="clickExample3()">3.输出1到127内所有奇数</button>
+        <button class="example-button" onclick="clickExample(0)">1.位运算实现两数相加</button>
+        <button class="example-button" onclick="clickExample(1)">2.Hello,world!</button>
+        <button class="example-button" onclick="clickExample(2)">3.输出1到127内所有奇数</button>
+        <button class="example-button" onclick="clickExample(3)">4.跳转到标签</button>
+        <button class="example-button" onclick="clickExample(4)">5.计算5的阶乘</button>
     </p>
     <textarea class="code" id="asm-code" autocorrect="off" oninput="clickCompile()"></textarea>
     <textarea class="code" id="machine-code" readonly autocorrect="off"></textarea>
