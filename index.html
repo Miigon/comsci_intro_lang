@@ -180,6 +180,41 @@ LOADV F,3D      // registerF, '='
 DEBUGA F        // output '='
 DEBUG 1         // output result
 HALT            // stop execution
+`,
+`// 例子6: 斐波那契数列
+// registers:
+// [0] target n
+// [1] a[n-2]
+// [2] a[n-1]
+// [3] a[n]
+// [4] n
+
+// [E] constant, '\\n'
+// [F] constant, 1
+
+LOADV E,0A
+LOADV F,1
+
+LOADV 0,0C
+LOADV 1,0
+LOADV 2,1
+
+LOADV 4,1
+
+:LOOP
+DEBUG 3
+DEBUGA E
+LJE 4 STOP
+ADD 4 4,F
+MOVE 2,1
+MOVE 3,2
+ADD 3 1,2
+LJE 0 LOOP
+
+:STOP
+HALT
+
+// 0 1 1 2 3 5 8 13 21 34 55 89
 `
 ]
             document.getElementById("asm-code").value = codes[i];
@@ -236,6 +271,7 @@ Note: this virtual machine has 16 registers (0x0 to 0xF) and 256 bytes of RAM (0
         <button class="example-button" onclick="clickExample(2)">3.输出1到127内所有奇数</button>
         <button class="example-button" onclick="clickExample(3)">4.跳转到标签</button>
         <button class="example-button" onclick="clickExample(4)">5.计算5的阶乘</button>
+        <button class="example-button" onclick="clickExample(5)">6.斐波那契数列</button>
     </p>
     <textarea class="code" id="asm-code" autocorrect="off" oninput="clickCompile()"></textarea>
     <textarea class="code" id="machine-code" readonly autocorrect="off"></textarea>
